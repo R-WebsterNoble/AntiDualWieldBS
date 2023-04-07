@@ -1,5 +1,12 @@
 <html>
 
+<head>
+    <!-- Load plotly.js into the DOM -->
+    <script src='https://cdn.plot.ly/plotly-2.20.0.min.js'></script>
+</head>
+
+<!-- <body scroll="no" style="overflow: hidden"> -->
+
 <body>
     <div>
         <label for="input_accuracy">Hit probability </label><input id="input_accuracy" type="range" min="0" max="100"
@@ -7,25 +14,22 @@
     </div>
     <div>
         <label for="input_AntiBSFactor">Anti BS Factor </label><input id="input_AntiBSFactor" type="range" min="0"
-            max="10" value="5" /><label for="input_AntiBSFactor" id="label_input_AntiBSFactor">5</label>
+            max="10" value="0" /><label for="input_AntiBSFactor" id="label_input_AntiBSFactor">0</label>
     </div>
+    <!-- <div style="height:100%; width:100%; overflow: hidden;">
+        <canvas id="canvas" , width="1000" , height="1000" style="float: left; width:50%;"></canvas>
+        <div id='myDiv' style="cursor:none; float: right; width:50%;"></div>
+    </div> -->
     <canvas id="canvas" , width="1000" , height="1000"></canvas>
+    <div id='myDiv' style="cursor:none; position: absolute; top: 0%; left:1100px "></div>
+
 
 </body>
 
 <script>
     DRAW_SAMPLES = 1000;
 
-    function setPixel(imageData, x, y, shade = 255) {
-        x = Math.round(x);
-        y = Math.round(y);
-        let index = 4 * (x + y * imageData.width);
-        let pixels = imageData.data;
-        pixels[index + 0] = shade;    // R
-        pixels[index + 1] = shade;      // G
-        pixels[index + 2] = shade;    // B
-        pixels[index + 3] = 256;    //A
-    }
+
 
     function DrawHitCircle(imageData, r) {
         let minAngle = Math.acos(1 - 1 / r);
@@ -58,6 +62,8 @@
         return { x: nx, y: ny };
     }
 
+
+
     function GenerateImage(imageData, minimumAccuracy, shotSimulator) {
         for (let i = 1; i < DRAW_SAMPLES; i++) {
             let shot = shotSimulator(minimumAccuracy);
@@ -80,84 +86,325 @@
         return rand_normal;
     }
 
-    function generate() {
+    function randn_bm() {
+        let u = 0, v = 0;
+        while (u === 0) u = Math.random(); //Converting [0,1) to (0,1)
+        while (v === 0) v = Math.random();
+        let num = Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * Math.PI * v);
+        num = num / 10.0 + 0.5; // Translate to 0 -> 1
+        if (num > 1 || num < 0) return randn_bm() // resample between 0 and 1
+        return num
+    }
+
+    function drawPlayer(ctx, x, y, scale) {
+        function drawPill(ctx, x, y, height, radius) {
+            ctx.beginPath();
+
+            ctx.arc(x, y, radius, 1.0 * Math.PI, 0.0 * Math.PI, false);
+
+            ctx.lineTo(x + radius, y + height);
+
+            ctx.arc(x, y + height, radius, 0.0 * Math.PI, 1.0 * Math.PI, false);
+
+            ctx.lineTo(x - radius, y);
+
+            ctx.strokeStyle = "#FFFFFF";
+            ctx.stroke();
+        }
+
+        function drawCircle(ctx, x, y, radius) {
+            ctx.beginPath();
+
+            ctx.arc(x, y, radius, 0 * Math.PI, 2 * Math.PI, false);
+
+            ctx.strokeStyle = "#FFFFFF";
+            ctx.stroke();
+        }
+
+
+        drawCircle(ctx, x, y - (3 * scale), 1.25 * scale);
+        drawPill(ctx, x, y, 3 * scale, 2.10 * scale);
+    }
+
+    function testHit(x, y, px, py, pScale) {
+        function getDistance(x1, y1, x2, y2) {
+            let y = x2 - x1;
+            let x = y2 - y1;
+
+            return Math.sqrt(x * x + y * y);
+        }
+
+        function testHitRect(px, py, ax, ay, bx, by) {
+            // // Calculate the coordinates of the other corner of the rectangle
+            // const bx = ax + aWidth;
+            // const by = ay + aHeight;
+
+            // Check if the point is inside the rectangle
+            if (px >= ax && px <= bx && py >= ay && py <= by) {
+                return true;
+            } else {
+                return false;
+            }
+        }
+
+        //body Rect
+        const playerWidth = pScale * 2.10;
+        const playerHeight = pScale * 3.0;
+        if (testHitRect(x, y, px - playerWidth, py, px + playerWidth, py + playerHeight))
+            return true;
+
+        //upper body
+        dist = getDistance(x, y, py, px);
+        if (dist < pScale * 2.10)
+            return true;
+
+        //lower body
+        dist = getDistance(x, y - (3 * pScale), py, px);
+        if (dist < pScale * 2.10)
+            return true;
+
+
+        //head
+        var dist = getDistance(x, y, py, px - (3 * pScale));
+        if (dist < pScale * 1.25)
+            return true;
+
+        return false;
+    }
+
+    function drawCrosshair(ctx, mx, my, scale) {
+        const cScale = scale;
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(mx - 2, my - (50 + cScale), 5, 50);
+        ctx.fillRect(mx - 2, my + cScale + 1, 5, 50);
+        ctx.fillRect(mx - (50 + cScale), my - 2, 50, 5);
+        ctx.fillRect(mx + cScale + 1, my - 2, 50, 5);
+    }
+
+
+
+    function generate(e) {
         let canvas = document.getElementById('canvas');
         let ctx = canvas.getContext('2d');
         let canvasWidth = canvas.width;
         let canvasHeight = canvas.height;
+
+        function setPixel(imageData, x, y, shade = "white") {
+            if (x < 0 || x > canvasWidth || y < 0 || y > canvasHeight)
+                return;
+
+            x = Math.round(x);
+            y = Math.round(y);
+            let index = 4 * (x + y * imageData.width);
+            let pixels = imageData.data;
+
+            var r;
+            var g;
+            var b;
+
+            switch (shade) {
+                case "black":
+                    r = 0;
+                    g = 0;
+                    b = 0;
+                    break;
+                case "white":
+                    r = 256;
+                    g = 256;
+                    b = 256;
+                    break;
+                case "red":
+                    r = 256;
+                    g = 0;
+                    b = 0;
+                    break;
+                    break;
+                case "green":
+                    r = 0;
+                    g = 256;
+                    b = 0;
+                    break;
+                case "blue":
+                    r = 0;
+                    g = 0;
+                    b = 256;
+                    break;
+                case "yellow":
+                    r = 256;
+                    g = 256;
+                    b = 0;
+                    break;
+                case "grey":
+                    r = 100;
+                    g = 100;
+                    b = 100;
+                    break;
+                default:
+                // code block
+            }
+
+            pixels[index + 0] = r;    // R
+            pixels[index + 1] = g;      // G
+            pixels[index + 2] = b;    // B
+            pixels[index + 3] = 256;    //A
+        }
+
+        function setPixels(imageData, x, y, shade = "white") {
+            setPixel(imageData, x, y, shade)
+            setPixel(imageData, x + 1, y, shade)
+            setPixel(imageData, x - 1, y, shade)
+            setPixel(imageData, x, y + 1, shade)
+            setPixel(imageData, x, y - 1, shade)
+        }
+
         ctx.clearRect(0, 0, canvasWidth, canvasHeight);
 
         ctx.fillStyle = '#000'
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+        const px = canvasWidth / 2.0;
+        const py = canvasHeight / 2.0;
+
+        let acuracyPercentage = parseInt(document.getElementById("input_accuracy").value)
+
+        drawPlayer(ctx, px, py, acuracyPercentage);
+
         let imageData = ctx.getImageData(0, 0, canvasWidth, canvasHeight);
 
-        function GetSimpleShot(minimumAccuracy) {
-            let a = Math.random() * canvasWidth / 2;
-            return { hit: a < minimumAccuracy, accuracy: a }
-        }
+        // const hit = testHit(x, 100, x, y, 100);
+        // setPixel(imageData, x, 100, hit ? 100 : 255);
 
-        function GetGaussianShot(minimumAccuracy) {
-            let a = Math.abs(GetGaussian());
-            a = Math.min(a, canvasWidth - 1.0);
-            return { hit: a < minimumAccuracy, accuracy: a }
-        }
+        // const hit2 = testHit(100, 100, x, y, 100);
+        // setPixel(imageData, 100, 100, hit2 ? 100 : 255);
+
+        // for (var i = 0; i < canvasWidth; i += 5) {
+        //     for (var j = 0; j < canvasHeight; j += 5) {
+        //         const hit = testHit(i, j, px, py, acuracyPercentage);
+        //         setPixel(imageData, i, j, hit ? "green" : "grey");
+        //     }
+        // }
 
         let antiBsFactor = parseInt(document.getElementById("input_AntiBSFactor").value);
-        var _antiBsFactor = antiBsFactor * 2;
+        var _antiBsFactor = (antiBsFactor * 2) + 1;
         var _threshold = antiBsFactor;
 
-        function GetAntiBsShot(minimumAccuracy) {
+        var mx;
+        var my;
+        if (e && e.clientX) {
+            var rect = canvas.getBoundingClientRect();
+            mx = e.clientX - rect.left;
+            my = e.clientY - rect.top;
+        }
+        else {
+            mx = px;
+            my = py;
+        }
+
+        function GetAntiBsShot() {
             let shotAccumulator = 0
-            var missedShot = 0.0;
+            var missedShotX = 0;
+            var missedShotY = 0;
             for (var i = 0; i < _antiBsFactor; i++) {
-                let shotCandidate = GetGaussianShot(minimumAccuracy);
-                if (shotCandidate.hit) {
+                let sx = mx + accuracyPixels * ((randn_bm() - 0.5) * 2);
+                let sy = my + accuracyPixels * ((randn_bm() - 0.5) * 2);
+                if (testHit(sx, sy, px, py, acuracyPercentage)) {
                     shotAccumulator++;
 
                     if (shotAccumulator < _threshold)
                         continue;
 
-                    return { hit: true, accuracy: shotCandidate.accuracy };
+                    return { hit: true, x: sx, y: sy };
                 }
 
-                missedShot = shotCandidate.accuracy;
+                missedShotX = sx;
+                missedShotY = sy;
             }
 
-            return { hit: false, accuracy: missedShot }
+            return { hit: false, x: missedShotX, y: missedShotY }
         }
 
-        let acuracyPercentage = parseInt(document.getElementById("input_accuracy").value)
-        let minimumAccuracy;
-        if (acuracyPercentage > 0) {
-            let acuracyfraction = (acuracyPercentage + 1) / 101;
-            let acuracyPow = Math.pow(acuracyfraction, 3);
-            minimumAccuracy = acuracyPow * 500;//66.65;
-        }
-        else
-            minimumAccuracy = 0;
-        DrawHitCircle(imageData, minimumAccuracy);
+        const accuracyPixels = (500 - (acuracyPercentage * 5) + 125)
 
-        if (antiBsFactor > 0)
-            GenerateImage(imageData, minimumAccuracy, GetAntiBsShot)
-        else
-            GenerateImage(imageData, minimumAccuracy, GetGaussianShot)
+        for (let i = 0; i < DRAW_SAMPLES; i++) {
+            const shot = GetAntiBsShot();
+            setPixels(imageData, shot.x, shot.y, shot.hit ? "green" : "yellow");
+        }
+
+        setPixels(imageData, mx, my, "white");
 
         ctx.putImageData(imageData, 0, 0);
+        drawCrosshair(ctx, mx, my, accuracyPixels);
+
+        const samples = []
+        for (let i = 0; i < 1000; i++) {
+            let j = 1
+            for (; j < 20; j++) {
+                if (GetAntiBsShot().hit) {
+                    samples.push(j)
+                    break
+                };
+            }
+            //samples.push(j);
+        }
+
+        var data = [
+            {
+                y: samples,
+                type: 'histogram',
+                marker: {
+                    color: 'pink',
+                }
+            }
+        ];
+
+        var layout =
+        {
+            width: 1000,
+            height: 1000,
+            xaxis:
+            {
+                range: [0, 500],
+                visible: false
+            },
+            yaxis:
+            {
+                dtick: 1,
+                title: "consecutive shots before player hit",
+                range: [0, 20],
+            }
+        };
+        Plotly.newPlot('myDiv', data, layout);
+
     };
 
-    document.getElementById('input_accuracy').addEventListener('input', () => {
+    document.getElementById('input_accuracy').addEventListener('input', (e) => {
         let t = document.getElementById("input_accuracy").value + "%";
         document.getElementById('label_input_accuracy').innerText = t;
-        generate();
+        generate(e);
     });
 
-    document.getElementById('input_AntiBSFactor').addEventListener('input', () => {
+    document.getElementById('input_AntiBSFactor').addEventListener('input', (e) => {
         document.getElementById('label_input_AntiBSFactor').innerText = document.getElementById("input_AntiBSFactor").value;
-        generate();
+        generate(e);
     });
 
-    generate();
+    document.getElementById('canvas').addEventListener('mousemove', (e) => {
+        generate(e);
+    });
+
+    document.getElementById('canvas').addEventListener('wheel', (e) => {
+        const clamp = (num, min, max) => Math.min(Math.max(num, min), max)
+        const inputAccuracyElement = document.getElementById("input_accuracy");
+        var inputAccuracy = parseInt(inputAccuracyElement.value);
+        inputAccuracy += e.deltaY / 20;
+        inputAccuracy = clamp(inputAccuracy, 1, 100);
+        console.log(inputAccuracy);
+        inputAccuracyElement.value = inputAccuracy
+        document.getElementById('label_input_accuracy').innerText = inputAccuracy + "%";
+        generate(e);
+    });
+
+    generate(null);
 
 </script>
 

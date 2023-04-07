@@ -310,7 +310,7 @@
                 if (testHit(sx, sy, px, py, acuracyPercentage)) {
                     shotAccumulator++;
 
-                    if (shotAccumulator < _threshold)
+                    if (shotAccumulator <= _threshold)
                         continue;
 
                     return { hit: true, x: sx, y: sy };

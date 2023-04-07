@@ -330,8 +330,6 @@
             setPixels(imageData, shot.x, shot.y, shot.hit ? "green" : "yellow");
         }
 
-        setPixels(imageData, mx, my, "white");
-
         ctx.putImageData(imageData, 0, 0);
         drawCrosshair(ctx, mx, my, accuracyPixels);
 

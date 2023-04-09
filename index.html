@@ -396,7 +396,7 @@
         const clamp = (num, min, max) => Math.min(Math.max(num, min), max)
         const inputAccuracyElement = document.getElementById("input_accuracy");
         var inputAccuracy = parseInt(inputAccuracyElement.value);
-        inputAccuracy += e.deltaY / 20;
+        inputAccuracy += e.deltaY / 40;
         inputAccuracy = clamp(inputAccuracy, 1, 100);
         console.log(inputAccuracy);
         inputAccuracyElement.value = inputAccuracy

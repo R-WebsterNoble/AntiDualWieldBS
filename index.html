@@ -300,8 +300,8 @@
             my = py;
         }
 
+        let shotAccumulator = 0;
         function GetAntiBsShot() {
-            let shotAccumulator = 0
             var missedShotX = 0;
             var missedShotY = 0;
             for (var i = 0; i < _antiBsFactor; i++) {
@@ -326,6 +326,7 @@
         const accuracyPixels = (500 - (acuracyPercentage * 5) + 125)
 
         for (let i = 0; i < DRAW_SAMPLES; i++) {
+            shotAccumulator = 0;
             const shot = GetAntiBsShot();
             setPixels(imageData, shot.x, shot.y, shot.hit ? "green" : "yellow");
         }
@@ -336,6 +337,7 @@
         const samples = []
         for (let i = 0; i < 1000; i++) {
             let j = 1
+            shotAccumulator = 0;
             for (; j < 20; j++) {
                 if (GetAntiBsShot().hit) {
                     samples.push(j)
